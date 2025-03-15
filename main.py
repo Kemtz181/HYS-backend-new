@@ -1,64 +1,68 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Enable CORS for all routes
 
-# API keys
-GROK_API_KEY = os.getenv("GROK_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-NEWS_API_KEY = os.getenv("NEWS_API_KEY")
-
+# Home route
 @app.route('/')
 def home():
     return "Hello from HaveYourSay Backend!"
 
+# News route with unique date and limited articles
 @app.route('/news')
 def get_news():
     try:
-        # NewsAPI request (real endpoint)
-        params = {
-            "q": "tech",
-            "apiKey": NEWS_API_KEY,
-            "language": "en"
-        }
-        response = requests.get("https://newsapi.org/v2/everything", params=params)
-        response.raise_for_status()
+        from_date = datetime.utcnow().strftime('%Y-%m-%d')
+        news_api_key = os.getenv('NEWS_API_KEY')
+        if not news_api_key:
+            return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
+        
+        url = f"https://newsapi.org/v2/everything?q=tech&from={from_date}&apiKey={news_api_key}&pageSize=5"
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for bad status codes
         return response.json()
-    except requests.RequestException as e:
-        return {"error": f"Failed to fetch news: {str(e)}"}, 500
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
 
+# Grok API route (placeholder - replace with real endpoint)
 @app.route('/grok')
 def get_grok():
     try:
-        # Grok API request (hypothetical endpoint)
-        headers = {"Authorization": f"Bearer {GROK_API_KEY}"}
-        response = requests.get("https://api.xai.com/grok-beta/news", headers=headers)
+        grok_api_key = os.getenv('GROK_API_KEY')
+        if not grok_api_key:
+            return jsonify({"error": "GROK_API_KEY not found in environment variables"}), 500
+        
+        url = "https://api.xai.com/grok/query"  # Replace with actual xAI Grok API endpoint
+        headers = {"Authorization": f"Bearer {grok_api_key}"}
+        response = requests.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
-    except requests.RequestException as e:
-        return {"error": f"Failed to fetch Grok news: {str(e)}"}, 500
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Failed to fetch Grok data: {str(e)}"}), 500
 
+# Gemini API route (placeholder - replace with real endpoint)
 @app.route('/gemini')
 def get_gemini():
     try:
-        # Gemini API request (hypothetical text generation)
-        headers = {"Authorization": f"Bearer {GEMINI_API_KEY}"}
-        response = requests.post(
-            "https://api.google.com/gemini/v2/generate",
-            headers=headers,
-            json={"prompt": "Summarize recent tech news"}
-        )
+        gemini_api_key = os.getenv('GEMINI_API_KEY')
+        if not gemini_api_key:
+            return jsonify({"error": "GEMINI_API_KEY not found in environment variables"}), 500
+        
+        url = "https://api.google.com/gemini/query"  # Replace with actual Google Gemini API endpoint
+        headers = {"Authorization": f"Bearer {gemini_api_key}"}
+        response = requests.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
-    except requests.RequestException as e:
-        return {"error": f"Failed to fetch Gemini data: {str(e)}"}, 500
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Failed to fetch Gemini data: {str(e)}"}), 500
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
