@@ -20,15 +20,17 @@ def home():
 @app.route('/news')
 def get_news():
     try:
-        from_date = datetime.utcnow().strftime('%Y-%m-%d')
         news_api_key = os.getenv('NEWS_API_KEY')
         if not news_api_key:
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
-        url = f"https://newsapi.org/v2/everything?q=tech&from={from_date}&apiKey={news_api_key}&pageSize=5"
+        url = f"https://newsapi.org/v2/everything?q=technology&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
         response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        return response.json()
+        response.raise_for_status()
+        data = response.json()
+        if data.get('status') != 'ok':
+            return jsonify({"error": "NewsAPI request failed", "details": data}), 500
+        return data
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
 
