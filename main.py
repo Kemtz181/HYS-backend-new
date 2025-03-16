@@ -7,19 +7,17 @@ import re
 
 app = Flask(__name__)
 
-def summarize_text(text, max_length=300):
-    """Improved summarization with sentence boundary detection."""
-    cleaned_text = re.sub(r'\[.*?\]', '', text or '').strip()
-    if len(cleaned_text) <= max_length:
-        return cleaned_text
-    sentences = re.split(r'(?<=[.!?])\s+', cleaned_text)
-    summary = ""
-    for sentence in sentences:
-        if len(summary) + len(sentence) <= max_length:
-            summary += sentence + " "
-        else:
-            break
-    return summary.strip() + "..."
+def clean_text(text):
+    """Cleans up news descriptions by removing incomplete text and unnecessary brackets."""
+    if not text:
+        return "No summary available."
+    
+    # Remove cutoff markers (e.g., "... [+380 chars]")
+    text = re.sub(r'\s*\[\+\d+ chars\]', '', text)
+    
+    # Ensure proper sentence endings
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    return ' '.join(sentences[:2])  # Use first two full sentences
 
 @app.route('/news')
 def get_news():
@@ -36,7 +34,12 @@ def get_news():
         data = response.json()
 
         articles = [
-            {"title": a["title"], "description": summarize_text(a["description"]), "url": a["url"], "media": {"image": a.get("urlToImage")}}
+            {
+                "title": a["title"], 
+                "description": clean_text(a.get("description", "")), 
+                "url": a["url"], 
+                "media": {"image": a.get("urlToImage")}
+            }
             for a in data.get("articles", [])
         ]
         return jsonify({"articles": articles})
