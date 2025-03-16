@@ -1,4 +1,4 @@
-echo "feedparser" >> requirements.txt
-echo "requests" >> requirements.txt
-echo "sumy" >> requirements.txt
-echo "flask" >> requirements.txt
+feedparser
+requests
+sumy
+flask
