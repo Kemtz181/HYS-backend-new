@@ -17,7 +17,8 @@ CORS(app)  # Enable CORS for all routes
 def home():
     return "Hello from HaveYourSay Backend!"
 
-# News route (NewsAPI)
+from datetime import datetime, timedelta
+
 @app.route('/news')
 def get_news():
     try:
@@ -25,8 +26,8 @@ def get_news():
         if not news_api_key:
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
-        from_date = (datetime.utcnow() - timedelta(days=2)).strftime('%Y-%m-%d')  # Past 2 days
-        url = f"https://newsapi.org/v2/everything?q=technology&from={from_date}&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
+        from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')  # Past 14 days
+        url = f"https://newsapi.org/v2/everything?q=conflict+OR+war+OR+crisis+OR+dispute+-sports+-entertainment&from={from_date}&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
@@ -36,7 +37,6 @@ def get_news():
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
 
-# Grok API route (xAI)
 # Grok API route (xAI)
 @app.route('/grok')
 def get_grok():
