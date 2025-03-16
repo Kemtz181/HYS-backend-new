@@ -11,43 +11,48 @@ from sumy.summarizers.lsa import LsaSummarizer
 app = Flask(__name__)
 
 def summarize_text(text, max_length=300):
-    """Rewrite text with a professional and engaging tone using Sumy (LSA)."""
+    """Rewrite text with a professional and engaging tone using Sumy (LSA), with debug output."""
     if not text or len(text) <= 0:
         return "No summary available at this time."
-    # Clean up artifacts thoroughly
+    # Thoroughly clean artifacts
     cleaned_text = re.sub(r'\[\+\d+ chars\]', '', text).strip()
     cleaned_text = re.sub(r'\[.*?\]', '', cleaned_text).strip()
     cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
+    print(f"Cleaned text: {cleaned_text[:100]}...")  # Debug: Print first 100 chars of cleaned text
     
     # Use Sumy to extract key sentences
-    parser = PlaintextParser.from_string(cleaned_text, Tokenizer("english"))
-    summarizer = LsaSummarizer()
-    summary_sentences = summarizer(parser.document, 2)  # Get 2 key sentences for coherence
-    summary_text = " ".join(str(sentence) for sentence in summary_sentences)
+    try:
+        parser = PlaintextParser.from_string(cleaned_text, Tokenizer("english"))
+        summarizer = LsaSummarizer()
+        summary_sentences = summarizer(parser.document, 2)  # Get 2 key sentences
+        summary_text = " ".join(str(sentence) for sentence in summary_sentences)
+        print(f"Sumy summary: {summary_text[:100]}...")  # Debug: Print first 100 chars of summary
+    except Exception as e:
+        print(f"Sumy error: {e}")
+        summary_text = cleaned_text  # Fallback if Sumy fails
     
-    # Ensure the summary fits the length and add a professional, engaging tone
+    # Add professional and engaging tone
     if len(summary_text) <= max_length:
         return f"Unveiling a critical update, {summary_text.strip()}. Discover more at the source."
     return f"Shedding light on a pressing issue, {summary_text[:max_length].strip()}... Explore the full narrative at the source."
 
 def extract_media_urls(article):
-    """Extract image and video URLs from article metadata."""
+    """Extract image and video URLs from article metadata with debug."""
     media = {}
-    # NewsAPI media
     if 'urlToImage' in article and article['urlToImage']:
         media['image'] = article['urlToImage']
-    # RSS feed media
+        print(f"Found image: {article['urlToImage']}")
     if 'media_content' in article:
         for content in article.get('media_content', []):
             if content.get('type', '').startswith('image/'):
                 media['image'] = content.get('url')
+                print(f"Found media image: {content.get('url')}")
             elif content.get('type', '').startswith('video/'):
                 media['video'] = content.get('url')
-    # Additional RSS fields
+                print(f"Found media video: {content.get('url')}")
     if 'media_thumbnail' in article:
         media['image'] = article['media_thumbnail'][0].get('url')
-    if 'enclosure' in article and 'type' in article['enclosure'] and article['enclosure']['type'].startswith('image/'):
-        media['image'] = article['enclosure'].get('url')
+        print(f"Found thumbnail: {article['media_thumbnail'][0].get('url')}")
     return media
 
 @app.route('/news')
@@ -58,29 +63,29 @@ def get_news():
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
-        # Stronger focus on Africa and Middle East, excluding Ukraine
-        newsapi_url = f"https://newsapi.org/v2/everything?q=((Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza+OR+Yemen+OR+Sudan)+AND+(conflict+OR+war+OR+crisis+OR+tension+OR+violence+OR+protest))+-Ukraine+-Russia+-Zelensky+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
-        newsapi_response = requests.get(newsapi_url)
+        # Even stricter focus on Africa and Middle East
+        newsapi_url = f"https://newsapi.org/v2/everything?q=((Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza+OR+Yemen+OR+Sudan)+AND+(conflict+OR+war+OR+crisis+OR+tension+OR+violence+OR+protest))+-Ukraine+-Russia+-Zelensky+-Trump+-Vance+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
+        print(f"NewsAPI URL: {newsapi_url}")  # Debug: Print the query
+        newsapi_response = requests.get(newapi_url)
         newsapi_response.raise_for_status()
         newsapi_data = newsapi_response.json()
         newsapi_articles = newsapi_data.get('articles', [])
+        print(f"NewsAPI articles count: {len(newsapi_articles)}")  # Debug: Print article count
 
-        # RSS feeds with stricter filtering
         rss_feeds = [
             "https://africa.cgtn.com/feed/",  # CGTN Africa
-            "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera (filter for Africa)
+            "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera
             "https://www.middleeasteye.net/rss",  # Middle East Eye
-            "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera (filter for Syria/Palestine)
             "http://feeds.bbci.co.uk/news/world/middle_east/rss.xml",  # BBC Middle East
             "http://feeds.bbci.co.uk/news/world/africa/rss.xml",  # BBC Africa
         ]
         rss_articles = []
         for feed_url in rss_feeds:
             feed = feedparser.parse(feed_url)
-            for entry in feed.entries[:3]:  # Increase to 3 entries per feed for more content
+            print(f"Parsing RSS feed: {feed_url}, Entries: {len(feed.entries)}")  # Debug: Print feed details
+            for entry in feed.entries[:3]:
                 title = entry.get('title', '').lower()
                 summary = entry.get('summary', '').lower()
-                # Stricter filtering for Africa, Middle East, excluding Ukraine
                 is_relevant = (
                     ("africa" in title or "africa" in summary or
                      "syria" in title or "syria" in summary or
@@ -92,7 +97,9 @@ def get_news():
                      "crisis" in title or "crisis" in summary) and
                     "ukraine" not in title and "ukraine" not in summary and
                     "russia" not in title and "russia" not in summary and
-                    "zelensky" not in title and "zelensky" not in summary
+                    "zelensky" not in title and "zelensky" not in summary and
+                    "trump" not in title and "trump" not in summary and
+                    "vance" not in title and "vance" not in summary
                 )
                 if is_relevant:
                     rss_article = {
@@ -101,12 +108,12 @@ def get_news():
                         'url': entry.get('link', '#'),
                         'publishedAt': entry.get('published', datetime.utcnow().isoformat()),
                         'media_content': entry.get('media_content', []),
-                        'media_thumbnail': entry.get('media_thumbnail', []),
-                        'enclosure': entry.get('enclosure', {})
+                        'media_thumbnail': entry.get('media_thumbnail', [])
                     }
                     rss_articles.append(rss_article)
 
         all_articles = newsapi_articles + rss_articles
+        print(f"Total articles: {len(all_articles)}")  # Debug: Print total articles
         for article in all_articles:
             raw_text = article.get('content', article.get('description', article.get('summary', 'No full text available')))
             if not raw_text or len(raw_text) <= 0:
