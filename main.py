@@ -44,14 +44,11 @@ from datetime import datetime, timedelta
 @app.route('/grok')
 def get_grok():
     try:
-        grok_api_key = os.getenv('GROK_API_KEY')
+        grok_api_key = os.getenv('GROK_API_KEY', 'xai-Xi5LRXNlaPl6fsU1d1r24oMpeEwX77q8l958XJluCW3hoLllIMHeBu9Jxm5S3WlFTpx0IIBEul1ziva')
         if not grok_api_key:
             return jsonify({"error": "GROK_API_KEY not found in environment variables"}), 500
         
-        # Hypothetical X post search (simulated here, as I can analyze X posts)
-        # Replace with actual X API call if you have an X API key
-        query = "conflict OR war OR crisis -sports -entertainment lang:en"
-        # Simulated response based on X post analysis (example data)
+        # Simulated X post data (replace with real X API call if you have a key)
         simulated_x_posts = [
             {"text": "Unreported clashes in rural Yemen, locals say aid is delayed.", "user": "YemenVoice", "date": "2025-03-14"},
             {"text": "Heavy fighting in eastern Congo, no media coverage.", "user": "CongoWatch", "date": "2025-03-13"}
@@ -70,7 +67,8 @@ def get_grok():
         url = "https://api.x.ai/v1/chat/completions"
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        return jsonify({"summary": data.choices[0].message.content if data.choices else "No summary available"})
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to fetch Grok data: {str(e)}"}), 500
 
