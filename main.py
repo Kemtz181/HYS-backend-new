@@ -65,9 +65,9 @@ def get_news():
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         print(f"NEWS_API_KEY found: {news_api_key[:5]}...")  # Debug: First 5 chars for security
 
-        from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
-        # Simplified NewsAPI query
-        newsapi_url = f"https://newsapi.org/v2/everything?q=(Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza+OR+Yemen+OR+Sudan)+-Ukraine+-Russia+-Zelensky&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
+        from_date = (datetime.utcnow() - timedelta(days=7)).strftime('%Y-%m-%d')  # Last 7 days
+        # Broad query for latest reports, excluding entertainment, tech, sports
+        newsapi_url = f"https://newsapi.org/v2/everything?q=*&from={from_date}&language=en&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
         print(f"NewsAPI URL: {newsapi_url}")  # Debug: Print the query
         try:
             newsapi_response = requests.get(newsapi_url)
@@ -79,10 +79,11 @@ def get_news():
             print(f"NewsAPI raw articles count: {len(newsapi_articles)}")  # Debug: Raw count
             if newsapi_articles:
                 print(f"First NewsAPI article: {newsapi_articles[0].get('title')}, {newsapi_articles[0].get('description')[:100]}...")
-            # Filter NewsAPI articles
+            # Filter out entertainment, tech, sports
             filtered_newsapi_articles = [
                 a for a in newsapi_articles
-                if not any(term in (a.get('title', '').lower() or a.get('description', '').lower()) for term in ['ukraine', 'russia', 'zelensky'])
+                if not any(term in (a.get('title', '').lower() or a.get('description', '').lower())
+                           for term in ['entertainment', 'tech', 'technology', 'sports', 'sport'])
             ]
             print(f"NewsAPI filtered articles count: {len(filtered_newsapi_articles)}")  # Debug: Filtered count
         except requests.exceptions.RequestException as e:
@@ -93,9 +94,8 @@ def get_news():
             "https://africa.cgtn.com/feed/",  # CGTN Africa
             "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera
             "https://www.middleeasteye.net/rss",  # Middle East Eye
-            "http://feeds.bbci.co.uk/news/world/middle_east/rss.xml",  # BBC Middle East
-            "http://feeds.bbci.co.uk/news/world/africa/rss.xml",  # BBC Africa
-            "https://www.africanews.com/rss",  # AfricaNews
+            "http://feeds.bbci.co.uk/news/world/rss.xml",  # BBC World
+            "http://feeds.reuters.com/reuters/topNews",  # Reuters
         ]
         rss_articles = []
         for feed_url in rss_feeds:
@@ -109,37 +109,21 @@ def get_news():
                     title = entry.get('title', '').lower()
                     summary = entry.get('summary', '').lower()
                     print(f"RSS entry - Title: {title[:50]}..., Summary: {summary[:50]}...")  # Debug: Entry details
-                    # Simplified relevance check: accept any article from these regional feeds
-                    is_relevant = (
-                        "africa" in title or "africa" in summary or
-                        "syria" in title or "syria" in summary or
-                        "palestine" in title or "palestine" in summary or
-                        "gaza" in title or "gaza" in summary or
-                        "yemen" in title or "yemen" in summary or
-                        "sudan" in title or "sudan" in summary or
-                        feed_url in [
-                            "https://africa.cgtn.com/feed/",
-                            "http://feeds.bbci.co.uk/news/world/africa/rss.xml",
-                            "https://www.africanews.com/rss",
-                            "https://www.aljazeera.com/xml/rss/all.xml",
-                            "https://www.middleeasteye.net/rss",
-                            "http://feeds.bbci.co.uk/news/world/middle_east/rss.xml"
-                        ]
-                    )
-                    # Exclude Ukraine-related articles
-                    if is_relevant and not any(term in (title + summary) for term in ['ukraine', 'russia', 'zelensky']):
-                        rss_article = {
-                            'title': entry.get('title', 'No title'),
-                            'description': entry.get('summary', 'No description'),
-                            'url': entry.get('link', '#'),
-                            'publishedAt': entry.get('published', datetime.utcnow().isoformat()),
-                            'media_content': entry.get('media_content', []),
-                            'media_thumbnail': entry.get('media_thumbnail', [])
-                        }
-                        rss_articles.append(rss_article)
-                        print(f"Added RSS article: {entry.get('title', 'No title')}")
-                    else:
-                        print(f"Rejected RSS article: {entry.get('title', 'No title')} - Not relevant or contains excluded terms")
+                    # Accept all articles from these feeds, exclude entertainment, tech, sports
+                    is_relevant = True  # Accept all by default
+                    if any(term in (title + summary) for term in ['entertainment', 'tech', 'technology', 'sports', 'sport']):
+                        print(f"Rejected RSS article: {entry.get('title', 'No title')} - Contains excluded term")
+                        continue
+                    rss_article = {
+                        'title': entry.get('title', 'No title'),
+                        'description': entry.get('summary', 'No description'),
+                        'url': entry.get('link', '#'),
+                        'publishedAt': entry.get('published', datetime.utcnow().isoformat()),
+                        'media_content': entry.get('media_content', []),
+                        'media_thumbnail': entry.get('media_thumbnail', [])
+                    }
+                    rss_articles.append(rss_article)
+                    print(f"Added RSS article: {entry.get('title', 'No title')}")
             except Exception as e:
                 print(f"RSS feed error for {feed_url}: {e}")
 
