@@ -4,36 +4,37 @@ from flask import Flask, jsonify
 from datetime import datetime, timedelta
 import os
 import re
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.summarizers.lsa import LsaSummarizer
 
 app = Flask(__name__)
 
 def summarize_text(text, max_length=300):
-    """Summarize text with professional tone, truncating at sentence boundaries and removing artifacts."""
+    """Rewrite text with a professional and engaging tone using Sumy (LSA) as a base."""
     if not text or len(text) <= 0:
         return "No summary available at this time."
-    # Thoroughly clean artifacts like "[+X chars]" and other bracketed content
+    # Clean up artifacts
     cleaned_text = re.sub(r'\[\+\d+ chars\]', '', text).strip()
     cleaned_text = re.sub(r'\[.*?\]', '', cleaned_text).strip()
-    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)  # Normalize whitespace
-    # Ensure a professional and engaging summary
-    if len(cleaned_text) <= max_length:
-        return f"In a noteworthy development, {cleaned_text.strip()} [Full details available at the source]."
-    sentences = re.split(r'(?<=[.!?])\s+', cleaned_text)
-    summary = ""
-    for sentence in sentences:
-        if len(summary) + len(sentence) <= max_length:
-            summary += sentence + " "
-        else:
-            break
-    return f"Highlighting a significant event, {summary.strip()}... [Read the full report at the source]."
+    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
+    
+    # Use Sumy for summarization
+    parser = PlaintextParser.from_string(cleaned_text, Tokenizer("english"))
+    summarizer = LsaSummarizer()
+    summary_sentences = summarizer(parser.document, 3)  # Get up to 3 key sentences
+    summary_text = " ".join(str(sentence) for sentence in summary_sentences)
+    
+    # Add professional and engaging tone
+    if len(summary_text) <= max_length:
+        return f"In an intriguing update, {summary_text.strip()} [Discover more at the source]."
+    return f"Delving into a compelling story, {summary_text[:max_length].strip()}... [Explore the full narrative at the source]."
 
 def extract_media_urls(article):
     """Extract image and video URLs from article metadata."""
     media = {}
-    # NewsAPI media
     if 'urlToImage' in article and article['urlToImage']:
         media['image'] = article['urlToImage']
-    # RSS feed media
     if 'media_content' in article:
         for content in article.get('media_content', []):
             if content.get('type', '').startswith('image/'):
@@ -50,22 +51,18 @@ def get_news():
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
-        # NewsAPI call with stronger focus on Africa and Middle East, excluding Ukraine
-        newsapi_url = f"https://newsapi.org/v2/everything?q=((Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza)+AND+(conflict+OR+war+OR+crisis+OR+tension))+-Ukraine+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
+        # Stronger focus on Africa and Middle East, excluding Ukraine
+        newsapi_url = f"https://newsapi.org/v2/everything?q=((Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza)+AND+(conflict+OR+war+OR+crisis+OR+tension+OR+violence))+-Ukraine+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
         newsapi_response = requests.get(newsapi_url)
         newsapi_response.raise_for_status()
         newsapi_data = newsapi_response.json()
         newsapi_articles = newsapi_data.get('articles', [])
 
-        # RSS feeds
         rss_feeds = [
-            # African news
             "https://africa.cgtn.com/feed/",  # CGTN Africa
             "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera (filter for Africa)
-            # Middle East, Syria, Palestine
             "https://www.middleeasteye.net/rss",  # Middle East Eye
             "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera (filter for Syria/Palestine)
-            # General feeds (filtered)
             "http://feeds.bbci.co.uk/news/world/rss.xml",
             "http://feeds.reuters.com/reuters/topNews",
             "https://www.apnews.com/apf-content/rss/feed/category/breaking-news"
@@ -74,14 +71,14 @@ def get_news():
         for feed_url in rss_feeds:
             feed = feedparser.parse(feed_url)
             for entry in feed.entries[:2]:
-                # Filter for Africa, Syria, Palestine, exclude Ukraine
                 title = entry.get('title', '').lower()
                 summary = entry.get('summary', '').lower()
                 is_relevant = (
                     ("africa" in title or "africa" in summary or
                      "syria" in title or "syria" in summary or
                      "palestine" in title or "palestine" in summary or
-                     "gaza" in title or "gaza" in summary) and
+                     "gaza" in title or "gaza" in summary or
+                     "violence" in title or "violence" in summary) and
                     "ukraine" not in title and "ukraine" not in summary
                 )
                 if is_relevant or feed_url in ["http://feeds.bbci.co.uk/news/world/rss.xml", "http://feeds.reuters.com/reuters/topNews", "https://www.apnews.com/apf-content/rss/feed/category/breaking-news"]:
@@ -94,23 +91,19 @@ def get_news():
                     }
                     rss_articles.append(rss_article)
 
-        # Combine articles
         all_articles = newsapi_articles + rss_articles
         for article in all_articles:
-            # Extract raw text and clean it
             raw_text = article.get('content', article.get('description', article.get('summary', 'No full text available')))
             if not raw_text or len(raw_text) <= 0:
                 raw_text = "No content available for this article."
-            # Clean and summarize
+            article['description'] = summarize_text(raw_text, 150)
             cleaned_text = re.sub(r'\[\+\d+ chars\]', '', raw_text).strip()
             cleaned_text = re.sub(r'\[.*?\]', '', cleaned_text).strip()
             cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
-            article['description'] = summarize_text(cleaned_text, 150)
             if len(cleaned_text) > 300:
-                article['full_text'] = summarize_text(cleaned_text, 300) + f" [Continue reading at: {article.get('url', '#')}]"
+                article['full_text'] = summarize_text(cleaned_text, 300) + f" [Explore the full narrative at: {article.get('url', '#')}]"
             else:
                 article['full_text'] = cleaned_text + f" [Full article at: {article.get('url', '#')}]"
-            # Extract media
             media = extract_media_urls(article)
             if media:
                 article['media'] = media
