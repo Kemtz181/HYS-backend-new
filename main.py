@@ -16,7 +16,7 @@ CORS(app)  # Enable CORS for all routes
 def home():
     return "Hello from HaveYourSay Backend!"
 
-# News route with unique date and limited articles
+# News route (NewsAPI)
 @app.route('/news')
 def get_news():
     try:
@@ -24,7 +24,8 @@ def get_news():
         if not news_api_key:
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
-        url = f"https://newsapi.org/v2/everything?q=technology&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
+        from_date = datetime.utcnow().strftime('%Y-%m-%d')  # Today’s date
+        url = f"https://newsapi.org/v2/everything?q=technology&from={from_date}&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
@@ -34,23 +35,13 @@ def get_news():
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
 
-# Grok API route (placeholder - replace with real endpoint)
+# Grok API route (xAI)
+# Grok API route (xAI)
 @app.route('/grok')
 def get_grok():
-    try:
-        grok_api_key = os.getenv('GROK_API_KEY')
-        if not grok_api_key:
-            return jsonify({"error": "GROK_API_KEY not found in environment variables"}), 500
-        
-        url = "https://api.xai.com/grok/query"  # Replace with actual xAI Grok API endpoint
-        headers = {"Authorization": f"Bearer {grok_api_key}"}
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to fetch Grok data: {str(e)}"}), 500
+    return jsonify({"status": "not_implemented", "message": "Grok API integration pending - correct endpoint required"}), 501
 
-# Gemini API route (placeholder - replace with real endpoint)
+# Gemini API route (Google)
 @app.route('/gemini')
 def get_gemini():
     try:
@@ -58,9 +49,19 @@ def get_gemini():
         if not gemini_api_key:
             return jsonify({"error": "GEMINI_API_KEY not found in environment variables"}), 500
         
-        url = "https://api.google.com/gemini/query"  # Replace with actual Google Gemini API endpoint
-        headers = {"Authorization": f"Bearer {gemini_api_key}"}
-        response = requests.get(url, headers=headers)
+        # Correct Gemini API endpoint (using the latest model name)
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        headers = {
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": "Summarize the latest trends in technology."
+                }]
+            }]
+        }
+        response = requests.post(f"{url}?key={gemini_api_key}", json=payload, headers=headers)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
