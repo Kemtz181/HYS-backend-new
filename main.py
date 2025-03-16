@@ -27,12 +27,16 @@ def get_news():
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')  # Past 14 days
-        url = f"https://newsapi.org/v2/everything?q=conflict+OR+war+OR+crisis+OR+dispute+-sports+-entertainment&from={from_date}&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
+        url = f"https://newsapi.org/v2/everything?q=conflict+OR+war+OR+crisis+OR+dispute+-sports+-entertainment+-automotive+-technology&language=en&from={from_date}&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
         if data.get('status') != 'ok':
             return jsonify({"error": "NewsAPI request failed", "details": data}), 500
+        # Ensure full description is returned
+        for article in data.get('articles', []):
+            if article.get('description') and article['description'].endswith('...'):
+                article['description'] = article.get('content', article['description'])[:200] if article.get('content') else article['description']
         return data
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
