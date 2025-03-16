@@ -1,23 +1,10 @@
-from datetime import datetime, timedelta
-from flask import Flask, jsonify
-from flask_cors import CORS
+import feedparser
 import requests
+from flask import Flask, jsonify
+from datetime import datetime, timedelta
 import os
-from datetime import datetime
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
-
-# Home route
-@app.route('/')
-def home():
-    return "Hello from HaveYourSay Backend!"
-
-from datetime import datetime, timedelta
 
 @app.route('/news')
 def get_news():
@@ -27,22 +14,49 @@ def get_news():
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
-        url = f"https://newsapi.org/v2/everything?q=(conflict+OR+war+OR+crisis+OR+tension+OR+protest)+AND+(Africa+OR+Middle+East+OR+Ukraine+OR+Europe)+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=10"
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-        if data.get('status') != 'ok':
-            return jsonify({"error": "NewsAPI request failed", "details": data}), 500
-        for article in data.get('articles', []):
-            full_text = article.get('content', article.get('description', 'No full text available'))
+        # NewsAPI call
+        newsapi_url = f"https://newsapi.org/v2/everything?q=(conflict+OR+war+OR+crisis+OR+tension+OR+protest)+AND+(Africa+OR+Middle+East+OR+Ukraine+OR+Europe)+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
+        newsapi_response = requests.get(newsapi_url)
+        newsapi_response.raise_for_status()
+        newsapi_data = newsapi_response.json()
+        newsapi_articles = newsapi_data.get('articles', [])
+
+        # RSS feeds
+        rss_feeds = [
+            "http://feeds.bbci.co.uk/news/world/rss.xml",
+            "http://www.aljazeera.com/xml/rss/all.xml",
+            "http://feeds.reuters.com/reuters/topNews",
+            "https://www.apnews.com/apf-content/rss/feed/category/breaking-news"
+        ]
+        rss_articles = []
+        for feed_url in rss_feeds:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries[:2]:  # Limit to 2 per feed
+                rss_articles.append({
+                    'title': entry.get('title', 'No title'),
+                    'description': entry.get('summary', 'No description')[:150] + '...' if len(entry.get('summary', 'No description')) > 150 else entry.get('summary', 'No description'),
+                    'url': entry.get('link', '#'),
+                    'full_text': entry.get('summary', 'No full text available') + f" [Full article at: {entry.get('link', '#')}]"
+                })
+
+        # Combine articles
+        all_articles = newsapi_articles + rss_articles
+        for article in all_articles:
+            full_text = article.get('full_text', article.get('content', article.get('description', 'No full text available')))
             if full_text and '...' in full_text[-10:] or len(full_text) < 200:
-                article['full_text'] = f"{full_text} [Full article available at: {article.get('url', '#')}]"
+                article['full_text'] = f"{full_text} [Full article at: {article.get('url', '#')}]"
             else:
                 article['full_text'] = full_text
             article['description'] = article.get('description', full_text[:150] + '...') if len(full_text) > 150 else full_text
-        return data
+
+        return jsonify({"articles": all_articles})
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
+except Exception as e:
+    return jsonify({"error": f"Error processing RSS: {str(e)}"}), 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
 
 import requests
 import os
