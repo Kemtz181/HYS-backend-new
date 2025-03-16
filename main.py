@@ -3,8 +3,22 @@ import requests
 from flask import Flask, jsonify
 from datetime import datetime, timedelta
 import os
+import re
 
 app = Flask(__name__)
+
+def summarize_text(text, max_length=300):
+    """Simple summarization by truncating at a sentence boundary."""
+    if len(text) <= max_length:
+        return text
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    summary = ""
+    for sentence in sentences:
+        if len(summary) + len(sentence) <= max_length:
+            summary += sentence + " "
+        else:
+            break
+    return summary.strip() + "..." if len(text) > max_length else summary.strip()
 
 @app.route('/news')
 def get_news():
@@ -31,7 +45,7 @@ def get_news():
         rss_articles = []
         for feed_url in rss_feeds:
             feed = feedparser.parse(feed_url)
-            for entry in feed.entries[:2]:  # Limit to 2 per feed
+            for entry in feed.entries[:2]:
                 rss_articles.append({
                     'title': entry.get('title', 'No title'),
                     'description': entry.get('summary', 'No description')[:150] + '...' if len(entry.get('summary', 'No description')) > 150 else entry.get('summary', 'No description'),
@@ -42,18 +56,23 @@ def get_news():
         # Combine articles
         all_articles = newsapi_articles + rss_articles
         for article in all_articles:
-            full_text = article.get('full_text', article.get('content', article.get('description', 'No full text available')))
-            if full_text and '...' in full_text[-10:] or len(full_text) < 200:
-                article['full_text'] = f"{full_text} [Full article at: {article.get('url', '#')}]"
+            # Clean up raw text
+            raw_text = article.get('content', article.get('description', article.get('summary', 'No full text available')))
+            # Remove "[+X chars]" markers
+            cleaned_text = re.sub(r'\[\+\d+ chars\]', '', raw_text).strip()
+            # Summarize for description
+            article['description'] = summarize_text(cleaned_text, 150)
+            # Full text with link if incomplete
+            if len(cleaned_text) > 300:
+                article['full_text'] = summarize_text(cleaned_text, 300) + f" [Continue reading at: {article.get('url', '#')}]"
             else:
-                article['full_text'] = full_text
-            article['description'] = article.get('description', full_text[:150] + '...') if len(full_text) > 150 else full_text
+                article['full_text'] = cleaned_text + f" [Full article at: {article.get('url', '#')}]"
 
         return jsonify({"articles": all_articles})
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
-except Exception as e:
-    return jsonify({"error": f"Error processing RSS: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error processing news: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
