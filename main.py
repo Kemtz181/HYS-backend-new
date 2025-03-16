@@ -27,16 +27,21 @@ def get_news():
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')  # Past 14 days
-        # Broaden to political news, explicitly include regions, exclude irrelevant topics
-        url = f"https://newsapi.org/v2/everything?q=(politics+OR+tension+OR+conflict+OR+war+OR+crisis)+AND+(Africa+OR+Middle+East+OR+Ukraine+OR+Europe)+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=publishedAt&apiKey={news_api_key}&pageSize=10"
+        # Enhanced query for conflict and political tension
+        url = f"https://newsapi.org/v2/everything?q=(conflict+OR+war+OR+crisis+OR+tension+OR+protest)+AND+(Africa+OR+Middle+East+OR+Ukraine+OR+Europe)+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=10"
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
         if data.get('status') != 'ok':
             return jsonify({"error": "NewsAPI request failed", "details": data}), 500
-        # Ensure full description
+        # Prioritize content over description, handle truncation
         for article in data.get('articles', []):
-            article['description'] = article.get('description', article.get('content', 'No description available')[:300])
+            full_text = article.get('content', article.get('description', 'No full text available'))
+            if full_text and '...' in full_text[-10:]:
+                article['full_text'] = full_text + " [Full article unavailable due to source limitation]"
+            else:
+                article['full_text'] = full_text
+            article['description'] = article.get('description', full_text[:150] + '...') if len(full_text) > 150 else full_text
         return data
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
