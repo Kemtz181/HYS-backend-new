@@ -11,14 +11,15 @@ from sumy.summarizers.lsa import LsaSummarizer
 app = Flask(__name__)
 
 def summarize_text(text, max_length=300):
-    """Rewrite text with a professional and engaging tone using Sumy (LSA), with debug output."""
+    """Rewrite text with a professional and engaging tone using Sumy (LSA), with debug."""
     if not text or len(text) <= 0:
+        print("No text to summarize")
         return "No summary available at this time."
     # Thoroughly clean artifacts
     cleaned_text = re.sub(r'\[\+\d+ chars\]', '', text).strip()
     cleaned_text = re.sub(r'\[.*?\]', '', cleaned_text).strip()
     cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
-    print(f"Cleaned text: {cleaned_text[:100]}...")  # Debug: Print first 100 chars of cleaned text
+    print(f"Cleaned text: {cleaned_text[:100]}...")  # Debug: First 100 chars
     
     # Use Sumy to extract key sentences
     try:
@@ -26,10 +27,10 @@ def summarize_text(text, max_length=300):
         summarizer = LsaSummarizer()
         summary_sentences = summarizer(parser.document, 2)  # Get 2 key sentences
         summary_text = " ".join(str(sentence) for sentence in summary_sentences)
-        print(f"Sumy summary: {summary_text[:100]}...")  # Debug: Print first 100 chars of summary
+        print(f"Sumy summary: {summary_text[:100]}...")  # Debug: First 100 chars of summary
     except Exception as e:
         print(f"Sumy error: {e}")
-        summary_text = cleaned_text  # Fallback if Sumy fails
+        summary_text = cleaned_text[:max_length]  # Fallback to truncated cleaned text
     
     # Add professional and engaging tone
     if len(summary_text) <= max_length:
@@ -37,7 +38,7 @@ def summarize_text(text, max_length=300):
     return f"Shedding light on a pressing issue, {summary_text[:max_length].strip()}... Explore the full narrative at the source."
 
 def extract_media_urls(article):
-    """Extract image and video URLs from article metadata with debug."""
+    """Extract image and video URLs with debug."""
     media = {}
     if 'urlToImage' in article and article['urlToImage']:
         media['image'] = article['urlToImage']
@@ -61,16 +62,23 @@ def get_news():
         news_api_key = os.getenv('NEWS_API_KEY')
         if not news_api_key:
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
-        
+        print(f"NEWS_API_KEY found: {news_api_key[:5]}...")  # Debug: First 5 chars for security
+
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
-        # Even stricter focus on Africa and Middle East
-        newsapi_url = f"https://newsapi.org/v2/everything?q=((Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza+OR+Yemen+OR+Sudan)+AND+(conflict+OR+war+OR+crisis+OR+tension+OR+violence+OR+protest))+-Ukraine+-Russia+-Zelensky+-Trump+-Vance+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
+        # Relaxed query to ensure articles, then filter
+        newsapi_url = f"https://newsapi.org/v2/everything?q=((Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza+OR+Yemen+OR+Sudan)+AND+(conflict+OR+war+OR+crisis+OR+tension+OR+violence+OR+protest))+-Ukraine+-Russia+-Zelensky&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
         print(f"NewsAPI URL: {newsapi_url}")  # Debug: Print the query
-        newsapi_response = requests.get(newapi_url)
+        newsapi_response = requests.get(newsapi_url)
         newsapi_response.raise_for_status()
         newsapi_data = newsapi_response.json()
         newsapi_articles = newsapi_data.get('articles', [])
-        print(f"NewsAPI articles count: {len(newsapi_articles)}")  # Debug: Print article count
+        print(f"NewsAPI raw articles count: {len(newsapi_articles)}")  # Debug: Raw count
+        # Filter NewsAPI articles
+        filtered_newsapi_articles = [
+            a for a in newsapi_articles
+            if not any(term in (a.get('title', '').lower() or a.get('description', '').lower()) for term in ['ukraine', 'russia', 'zelensky', 'trump', 'vance'])
+        ]
+        print(f"NewsAPI filtered articles count: {len(filtered_newsapi_articles)}")  # Debug: Filtered count
 
         rss_feeds = [
             "https://africa.cgtn.com/feed/",  # CGTN Africa
@@ -81,39 +89,44 @@ def get_news():
         ]
         rss_articles = []
         for feed_url in rss_feeds:
-            feed = feedparser.parse(feed_url)
-            print(f"Parsing RSS feed: {feed_url}, Entries: {len(feed.entries)}")  # Debug: Print feed details
-            for entry in feed.entries[:3]:
-                title = entry.get('title', '').lower()
-                summary = entry.get('summary', '').lower()
-                is_relevant = (
-                    ("africa" in title or "africa" in summary or
-                     "syria" in title or "syria" in summary or
-                     "palestine" in title or "palestine" in summary or
-                     "gaza" in title or "gaza" in summary or
-                     "yemen" in title or "yemen" in summary or
-                     "sudan" in title or "sudan" in summary or
-                     "violence" in title or "violence" in summary or
-                     "crisis" in title or "crisis" in summary) and
-                    "ukraine" not in title and "ukraine" not in summary and
-                    "russia" not in title and "russia" not in summary and
-                    "zelensky" not in title and "zelensky" not in summary and
-                    "trump" not in title and "trump" not in summary and
-                    "vance" not in title and "vance" not in summary
-                )
-                if is_relevant:
-                    rss_article = {
-                        'title': entry.get('title', 'No title'),
-                        'description': entry.get('summary', 'No description'),
-                        'url': entry.get('link', '#'),
-                        'publishedAt': entry.get('published', datetime.utcnow().isoformat()),
-                        'media_content': entry.get('media_content', []),
-                        'media_thumbnail': entry.get('media_thumbnail', [])
-                    }
-                    rss_articles.append(rss_article)
+            try:
+                feed = feedparser.parse(feed_url)
+                print(f"Parsing RSS feed: {feed_url}, Entries: {len(feed.entries)}, Status: {feed.status}")  # Debug: Feed status
+                for entry in feed.entries[:3]:
+                    title = entry.get('title', '').lower()
+                    summary = entry.get('summary', '').lower()
+                    is_relevant = (
+                        ("africa" in title or "africa" in summary or
+                         "syria" in title or "syria" in summary or
+                         "palestine" in title or "palestine" in summary or
+                         "gaza" in title or "gaza" in summary or
+                         "yemen" in title or "yemen" in summary or
+                         "sudan" in title or "sudan" in summary or
+                         "violence" in title or "violence" in summary or
+                         "crisis" in title or "crisis" in summary) and
+                        "ukraine" not in title and "ukraine" not in summary and
+                        "russia" not in title and "russia" not in summary and
+                        "zelensky" not in title and "zelensky" not in summary and
+                        "trump" not in title and "trump" not in summary and
+                        "vance" not in title and "vance" not in summary
+                    )
+                    if is_relevant:
+                        rss_article = {
+                            'title': entry.get('title', 'No title'),
+                            'description': entry.get('summary', 'No description'),
+                            'url': entry.get('link', '#'),
+                            'publishedAt': entry.get('published', datetime.utcnow().isoformat()),
+                            'media_content': entry.get('media_content', []),
+                            'media_thumbnail': entry.get('media_thumbnail', [])
+                        }
+                        rss_articles.append(rss_article)
+            except Exception as e:
+                print(f"RSS feed error for {feed_url}: {e}")
 
-        all_articles = newsapi_articles + rss_articles
-        print(f"Total articles: {len(all_articles)}")  # Debug: Print total articles
+        all_articles = filtered_newsapi_articles + rss_articles
+        print(f"Total articles after combining: {len(all_articles)}")  # Debug: Total count
+        if not all_articles:
+            return jsonify({"articles": [], "message": "No recent reports available. Check back soon!"})
         for article in all_articles:
             raw_text = article.get('content', article.get('description', article.get('summary', 'No full text available')))
             if not raw_text or len(raw_text) <= 0:
