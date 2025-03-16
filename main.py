@@ -58,23 +58,38 @@ def get_news():
 
         # RSS feeds
         rss_feeds = [
+            # General feeds
             "http://feeds.bbci.co.uk/news/world/rss.xml",
-            "http://www.aljazeera.com/xml/rss/all.xml",
             "http://feeds.reuters.com/reuters/topNews",
-            "https://www.apnews.com/apf-content/rss/feed/category/breaking-news"
+            "https://www.apnews.com/apf-content/rss/feed/category/breaking-news",
+            # African news
+            "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera (filter for Africa)
+            "https://africa.cgtn.com/feed/",  # CGTN Africa RSS feed
+            # Middle East, Syria, Palestine
+            "https://www.middleeasteye.net/rss",  # Middle East Eye
+            "https://www.aljazeera.com/xml/rss/all.xml"  # Al Jazeera (filter for Syria/Palestine)
         ]
         rss_articles = []
         for feed_url in rss_feeds:
             feed = feedparser.parse(feed_url)
             for entry in feed.entries[:2]:
-                rss_article = {
-                    'title': entry.get('title', 'No title'),
-                    'description': entry.get('summary', 'No description'),
-                    'url': entry.get('link', '#'),
-                    'publishedAt': entry.get('published', datetime.utcnow().isoformat()),
-                    'media_content': entry.get('media_content', [])
-                }
-                rss_articles.append(rss_article)
+                # Filter for Africa, Syria, or Palestine based on feed and content
+                title = entry.get('title', '').lower()
+                summary = entry.get('summary', '').lower()
+                is_relevant = (
+                    ("africa" in feed_url or "africa" in title or "africa" in summary) or
+                    ("middleeasteye" in feed_url or "syria" in title or "syria" in summary or
+                     "palestine" in title or "palestine" in summary or "gaza" in title or "gaza" in summary)
+                )
+                if is_relevant or feed_url in ["http://feeds.bbci.co.uk/news/world/rss.xml", "http://feeds.reuters.com/reuters/topNews", "https://www.apnews.com/apf-content/rss/feed/category/breaking-news"]:
+                    rss_article = {
+                        'title': entry.get('title', 'No title'),
+                        'description': entry.get('summary', 'No description'),
+                        'url': entry.get('link', '#'),
+                        'publishedAt': entry.get('published', datetime.utcnow().isoformat()),
+                        'media_content': entry.get('media_content', [])
+                    }
+                    rss_articles.append(rss_article)
 
         # Combine articles
         all_articles = newsapi_articles + rss_articles
