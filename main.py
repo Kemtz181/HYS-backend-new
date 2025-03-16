@@ -49,8 +49,8 @@ def get_news():
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
-        # NewsAPI call
-        newsapi_url = f"https://newsapi.org/v2/everything?q=(conflict+OR+war+OR+crisis+OR+tension+OR+protest)+AND+(Africa+OR+Middle+East+OR+Ukraine+OR+Europe)+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
+        # NewsAPI call with stricter filtering
+        newsapi_url = f"https://newsapi.org/v2/everything?q=(conflict+OR+war+OR+crisis+OR+tension+OR+protest)+AND+(Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza)+-Ukraine+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
         newsapi_response = requests.get(newsapi_url)
         newsapi_response.raise_for_status()
         newsapi_data = newsapi_response.json()
@@ -58,30 +58,32 @@ def get_news():
 
         # RSS feeds
         rss_feeds = [
-            # General feeds
-            "http://feeds.bbci.co.uk/news/world/rss.xml",
-            "http://feeds.reuters.com/reuters/topNews",
-            "https://www.apnews.com/apf-content/rss/feed/category/breaking-news",
             # African news
+            "https://africa.cgtn.com/feed/",  # CGTN Africa
             "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera (filter for Africa)
-            "https://africa.cgtn.com/feed/",  # CGTN Africa RSS feed
             # Middle East, Syria, Palestine
             "https://www.middleeasteye.net/rss",  # Middle East Eye
-            "https://www.aljazeera.com/xml/rss/all.xml"  # Al Jazeera (filter for Syria/Palestine)
+            "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera (filter for Syria/Palestine)
+            # General feeds (filtered for Africa/Middle East)
+            "http://feeds.bbci.co.uk/news/world/rss.xml",
+            "http://feeds.reuters.com/reuters/topNews",
+            "https://www.apnews.com/apf-content/rss/feed/category/breaking-news"
         ]
         rss_articles = []
         for feed_url in rss_feeds:
             feed = feedparser.parse(feed_url)
             for entry in feed.entries[:2]:
-                # Filter for Africa, Syria, or Palestine based on feed and content
+                # Filter for Africa, Syria, or Palestine, exclude Ukraine
                 title = entry.get('title', '').lower()
                 summary = entry.get('summary', '').lower()
                 is_relevant = (
-                    ("africa" in feed_url or "africa" in title or "africa" in summary) or
-                    ("middleeasteye" in feed_url or "syria" in title or "syria" in summary or
-                     "palestine" in title or "palestine" in summary or "gaza" in title or "gaza" in summary)
+                    ("africa" in feed_url or "africa" in title or "africa" in summary or
+                     "syria" in title or "syria" in summary or
+                     "palestine" in title or "palestine" in summary or
+                     "gaza" in title or "gaza" in summary) and
+                    "ukraine" not in title and "ukraine" not in summary
                 )
-                if is_relevant or feed_url in ["http://feeds.bbci.co.uk/news/world/rss.xml", "http://feeds.reuters.com/reuters/topNews", "https://www.apnews.com/apf-content/rss/feed/category/breaking-news"]:
+                if is_relevant:
                     rss_article = {
                         'title': entry.get('title', 'No title'),
                         'description': entry.get('summary', 'No description'),
@@ -99,11 +101,10 @@ def get_news():
             if not raw_text or len(raw_text) <= 0:
                 raw_text = "No content available for this article."
             # Clean and summarize
-            article['description'] = summarize_text(raw_text, 150)
-            # For full_text, use the entire cleaned text if available, otherwise summarize
             cleaned_text = re.sub(r'\[\+\d+ chars\]', '', raw_text).strip()
             cleaned_text = re.sub(r'\[.*?\]', '', cleaned_text).strip()
             cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
+            article['description'] = summarize_text(cleaned_text, 150)
             if len(cleaned_text) > 300:
                 article['full_text'] = summarize_text(cleaned_text, 300) + f" [Continue reading at: {article.get('url', '#')}]"
             else:
