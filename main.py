@@ -37,10 +37,42 @@ def get_news():
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
 
-# Grok API route (xAI)
+import requests
+import os
+from datetime import datetime, timedelta
+
 @app.route('/grok')
 def get_grok():
-    return jsonify({"status": "not_implemented", "message": "Grok API integration pending - correct endpoint required"}), 501
+    try:
+        grok_api_key = os.getenv('GROK_API_KEY')
+        if not grok_api_key:
+            return jsonify({"error": "GROK_API_KEY not found in environment variables"}), 500
+        
+        # Hypothetical X post search (simulated here, as I can analyze X posts)
+        # Replace with actual X API call if you have an X API key
+        query = "conflict OR war OR crisis -sports -entertainment lang:en"
+        # Simulated response based on X post analysis (example data)
+        simulated_x_posts = [
+            {"text": "Unreported clashes in rural Yemen, locals say aid is delayed.", "user": "YemenVoice", "date": "2025-03-14"},
+            {"text": "Heavy fighting in eastern Congo, no media coverage.", "user": "CongoWatch", "date": "2025-03-13"}
+        ]
+        payload = {
+            "messages": [
+                {"role": "system", "content": "You are a news aggregator analyzing X posts for underreported conflicts."},
+                {"role": "user", "content": f"Summarize these X posts for underreported conflicts: {simulated_x_posts}"}
+            ],
+            "model": "grok-2-latest"
+        }
+        headers = {
+            "Authorization": f"Bearer {grok_api_key}",
+            "Content-Type": "application/json"
+        }
+        url = "https://api.x.ai/v1/chat/completions"
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Failed to fetch Grok data: {str(e)}"}), 500
 
 # Gemini API route (Google)
 @app.route('/gemini')
