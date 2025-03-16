@@ -1,5 +1,4 @@
 import feedparser
-import requests
 from flask import Flask, jsonify
 from datetime import datetime, timedelta
 import os
@@ -15,13 +14,11 @@ def summarize_text(text, max_length=300):
     if not text or len(text) <= 0:
         print("No text to summarize")
         return "No summary available at this time."
-    # Thoroughly clean artifacts
     cleaned_text = re.sub(r'\[\+\d+ chars\]', '', text).strip()
     cleaned_text = re.sub(r'\[.*?\]', '', cleaned_text).strip()
     cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
     print(f"Cleaned text: {cleaned_text[:100]}...")  # Debug: First 100 chars
     
-    # Use Sumy to extract key sentences
     try:
         parser = PlaintextParser.from_string(cleaned_text, Tokenizer("english"))
         summarizer = LsaSummarizer()
@@ -32,7 +29,6 @@ def summarize_text(text, max_length=300):
         print(f"Sumy error: {e}")
         summary_text = cleaned_text[:max_length]  # Fallback to truncated cleaned text
     
-    # Add professional and engaging tone
     if len(summary_text) <= max_length:
         return f"Unveiling a critical update, {summary_text.strip()}. Discover more at the source."
     return f"Shedding light on a pressing issue, {summary_text[:max_length].strip()}... Explore the full narrative at the source."
@@ -40,9 +36,6 @@ def summarize_text(text, max_length=300):
 def extract_media_urls(article):
     """Extract image and video URLs with debug."""
     media = {}
-    if 'urlToImage' in article and article['urlToImage']:
-        media['image'] = article['urlToImage']
-        print(f"Found image: {article['urlToImage']}")
     if 'media_content' in article:
         for content in article.get('media_content', []):
             if content.get('type', '').startswith('image/'):
@@ -59,61 +52,37 @@ def extract_media_urls(article):
 @app.route('/news')
 def get_news():
     try:
-        news_api_key = os.getenv('NEWS_API_KEY')
-        if not news_api_key:
-            print("ERROR: NEWS_API_KEY not found in environment variables")
-            return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
-        print(f"NEWS_API_KEY found: {news_api_key[:5]}...")  # Debug: First 5 chars for security
-
-        from_date = (datetime.utcnow() - timedelta(days=7)).strftime('%Y-%m-%d')  # Last 7 days
-        # Broad query for latest reports, excluding entertainment, tech, sports
-        newsapi_url = f"https://newsapi.org/v2/everything?q=*&from={from_date}&language=en&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
-        print(f"NewsAPI URL: {newsapi_url}")  # Debug: Print the query
-        try:
-            newsapi_response = requests.get(newsapi_url)
-            newsapi_response.raise_for_status()
-            newsapi_data = newsapi_response.json()
-            print(f"NewsAPI response status: {newsapi_data.get('status')}")  # Debug: API status
-            print(f"NewsAPI total results: {newsapi_data.get('totalResults')}")  # Debug: Total results
-            newsapi_articles = newsapi_data.get('articles', [])
-            print(f"NewsAPI raw articles count: {len(newsapi_articles)}")  # Debug: Raw count
-            if newsapi_articles:
-                print(f"First NewsAPI article: {newsapi_articles[0].get('title')}, {newsapi_articles[0].get('description')[:100]}...")
-            # Filter out entertainment, tech, sports
-            filtered_newsapi_articles = [
-                a for a in newsapi_articles
-                if not any(term in (a.get('title', '').lower() or a.get('description', '').lower())
-                           for term in ['entertainment', 'tech', 'technology', 'sports', 'sport'])
-            ]
-            print(f"NewsAPI filtered articles count: {len(filtered_newsapi_articles)}")  # Debug: Filtered count
-        except requests.exceptions.RequestException as e:
-            print(f"NewsAPI request error: {e}")
-            filtered_newsapi_articles = []
-
         rss_feeds = [
-            "https://africa.cgtn.com/feed/",  # CGTN Africa
             "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera
-            "https://www.middleeasteye.net/rss",  # Middle East Eye
             "http://feeds.bbci.co.uk/news/world/rss.xml",  # BBC World
             "http://feeds.reuters.com/reuters/topNews",  # Reuters
+            "https://www.lemonde.fr/rss/une.xml",  # Le Monde
+            "https://www.ndtv.com/rss/news/world-news",  # NDTV World
+            "https://africa.cgtn.com/feed/",  # CGTN Africa
         ]
         rss_articles = []
         for feed_url in rss_feeds:
             try:
                 feed = feedparser.parse(feed_url)
-                print(f"Parsing RSS feed: {feed_url}, Entries: {len(feed.entries)}, Status: {feed.status}")  # Debug: Feed status
+                print(f"Parsing RSS feed: {feed_url}, Entries: {len(feed.entries)}, Status: {feed.status}")
                 if not feed.entries:
                     print(f"No entries in feed: {feed_url}")
                     continue
                 for entry in feed.entries[:3]:
                     title = entry.get('title', '').lower()
                     summary = entry.get('summary', '').lower()
-                    print(f"RSS entry - Title: {title[:50]}..., Summary: {summary[:50]}...")  # Debug: Entry details
-                    # Accept all articles from these feeds, exclude entertainment, tech, sports
-                    is_relevant = True  # Accept all by default
+                    print(f"RSS entry - Title: {title[:50]}..., Summary: {summary[:50]}...")
+                    # Exclude entertainment, tech, sports
                     if any(term in (title + summary) for term in ['entertainment', 'tech', 'technology', 'sports', 'sport']):
                         print(f"Rejected RSS article: {entry.get('title', 'No title')} - Contains excluded term")
                         continue
+                    # Check publication date (last 7 days)
+                    pub_date = entry.get('published_parsed')
+                    if pub_date:
+                        pub_datetime = datetime.fromtimestamp(sum(x * y for x, y in zip(pub_date[:6], [1, 60, 3600, 86400, 2629743, 31556926])))
+                        if pub_datetime < (datetime.utcnow() - timedelta(days=7)):
+                            print(f"Rejected RSS article: {entry.get('title', 'No title')} - Too old")
+                            continue
                     rss_article = {
                         'title': entry.get('title', 'No title'),
                         'description': entry.get('summary', 'No description'),
@@ -127,9 +96,9 @@ def get_news():
             except Exception as e:
                 print(f"RSS feed error for {feed_url}: {e}")
 
-        print(f"RSS articles count: {len(rss_articles)}")  # Debug: RSS count
-        all_articles = filtered_newsapi_articles + rss_articles
-        print(f"Total articles after combining: {len(all_articles)}")  # Debug: Total count
+        print(f"RSS articles count: {len(rss_articles)}")
+        all_articles = rss_articles
+        print(f"Total articles after combining: {len(all_articles)}")
         if not all_articles:
             print("No articles passed filtering")
             return jsonify({"articles": [], "message": "No recent reports available. Check back soon!"})
@@ -150,9 +119,6 @@ def get_news():
                 article['media'] = media
 
         return jsonify({"articles": all_articles})
-    except requests.exceptions.RequestException as e:
-        print(f"Global request error: {e}")
-        return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
     except Exception as e:
         print(f"Global error: {e}")
         return jsonify({"error": f"Error processing news: {str(e)}"}), 500
