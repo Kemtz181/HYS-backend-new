@@ -61,24 +61,34 @@ def get_news():
     try:
         news_api_key = os.getenv('NEWS_API_KEY')
         if not news_api_key:
+            print("ERROR: NEWS_API_KEY not found in environment variables")
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         print(f"NEWS_API_KEY found: {news_api_key[:5]}...")  # Debug: First 5 chars for security
 
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
-        # Relaxed query to ensure articles, then filter
-        newsapi_url = f"https://newsapi.org/v2/everything?q=((Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza+OR+Yemen+OR+Sudan)+AND+(conflict+OR+war+OR+crisis+OR+tension+OR+violence+OR+protest))+-Ukraine+-Russia+-Zelensky&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
+        # Simplified query to test NewsAPI response
+        newsapi_url = f"https://newsapi.org/v2/everything?q=(Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza+OR+Yemen+OR+Sudan)+-Ukraine+-Russia+-Zelensky&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
         print(f"NewsAPI URL: {newsapi_url}")  # Debug: Print the query
-        newsapi_response = requests.get(newsapi_url)
-        newsapi_response.raise_for_status()
-        newsapi_data = newsapi_response.json()
-        newsapi_articles = newsapi_data.get('articles', [])
-        print(f"NewsAPI raw articles count: {len(newsapi_articles)}")  # Debug: Raw count
-        # Filter NewsAPI articles
-        filtered_newsapi_articles = [
-            a for a in newsapi_articles
-            if not any(term in (a.get('title', '').lower() or a.get('description', '').lower()) for term in ['ukraine', 'russia', 'zelensky', 'trump', 'vance'])
-        ]
-        print(f"NewsAPI filtered articles count: {len(filtered_newsapi_articles)}")  # Debug: Filtered count
+        try:
+            newsapi_response = requests.get(newsapi_url)
+            newsapi_response.raise_for_status()
+            newsapi_data = newsapi_response.json()
+            print(f"NewsAPI response status: {newsapi_data.get('status')}")  # Debug: API status
+            print(f"NewsAPI total results: {newsapi_data.get('totalResults')}")  # Debug: Total results
+            newsapi_articles = newsapi_data.get('articles', [])
+            print(f"NewsAPI raw articles count: {len(newsapi_articles)}")  # Debug: Raw count
+            # Log first article for inspection
+            if newsapi_articles:
+                print(f"First NewsAPI article: {newsapi_articles[0].get('title')}, {newsapi_articles[0].get('description')[:100]}...")
+            # Filter NewsAPI articles
+            filtered_newsapi_articles = [
+                a for a in newsapi_articles
+                if not any(term in (a.get('title', '').lower() or a.get('description', '').lower()) for term in ['ukraine', 'russia', 'zelensky'])
+            ]
+            print(f"NewsAPI filtered articles count: {len(filtered_newsapi_articles)}")  # Debug: Filtered count
+        except requests.exceptions.RequestException as e:
+            print(f"NewsAPI request error: {e}")
+            filtered_newsapi_articles = []
 
         rss_feeds = [
             "https://africa.cgtn.com/feed/",  # CGTN Africa
@@ -86,15 +96,19 @@ def get_news():
             "https://www.middleeasteye.net/rss",  # Middle East Eye
             "http://feeds.bbci.co.uk/news/world/middle_east/rss.xml",  # BBC Middle East
             "http://feeds.bbci.co.uk/news/world/africa/rss.xml",  # BBC Africa
+            "https://www.africanews.com/rss",  # AfricaNews
         ]
         rss_articles = []
         for feed_url in rss_feeds:
             try:
                 feed = feedparser.parse(feed_url)
                 print(f"Parsing RSS feed: {feed_url}, Entries: {len(feed.entries)}, Status: {feed.status}")  # Debug: Feed status
+                if not feed.entries:
+                    print(f"No entries in feed: {feed_url}")
                 for entry in feed.entries[:3]:
                     title = entry.get('title', '').lower()
                     summary = entry.get('summary', '').lower()
+                    print(f"RSS entry - Title: {title[:50]}..., Summary: {summary[:50]}...")  # Debug: Entry details
                     is_relevant = (
                         ("africa" in title or "africa" in summary or
                          "syria" in title or "syria" in summary or
@@ -103,14 +117,11 @@ def get_news():
                          "yemen" in title or "yemen" in summary or
                          "sudan" in title or "sudan" in summary or
                          "violence" in title or "violence" in summary or
-                         "crisis" in title or "crisis" in summary) and
-                        "ukraine" not in title and "ukraine" not in summary and
-                        "russia" not in title and "russia" not in summary and
-                        "zelensky" not in title and "zelensky" not in summary and
-                        "trump" not in title and "trump" not in summary and
-                        "vance" not in title and "vance" not in summary
+                         "crisis" in title or "crisis" in summary or
+                         "protest" in title or "protest" in summary)
                     )
-                    if is_relevant:
+                    # Relaxed exclusion: only reject if explicitly about Ukraine
+                    if is_relevant and not any(term in (title + summary) for term in ['ukraine', 'russia', 'zelensky']):
                         rss_article = {
                             'title': entry.get('title', 'No title'),
                             'description': entry.get('summary', 'No description'),
@@ -120,12 +131,15 @@ def get_news():
                             'media_thumbnail': entry.get('media_thumbnail', [])
                         }
                         rss_articles.append(rss_article)
+                        print(f"Added RSS article: {entry.get('title', 'No title')}")
             except Exception as e:
                 print(f"RSS feed error for {feed_url}: {e}")
 
+        print(f"RSS articles count: {len(rss_articles)}")  # Debug: RSS count
         all_articles = filtered_newsapi_articles + rss_articles
         print(f"Total articles after combining: {len(all_articles)}")  # Debug: Total count
         if not all_articles:
+            print("No articles passed filtering")
             return jsonify({"articles": [], "message": "No recent reports available. Check back soon!"})
         for article in all_articles:
             raw_text = article.get('content', article.get('description', article.get('summary', 'No full text available')))
@@ -145,8 +159,10 @@ def get_news():
 
         return jsonify({"articles": all_articles})
     except requests.exceptions.RequestException as e:
+        print(f"Global request error: {e}")
         return jsonify({"error": f"Failed to fetch news: {str(e)}"}), 500
     except Exception as e:
+        print(f"Global error: {e}")
         return jsonify({"error": f"Error processing news: {str(e)}"}), 500
 
 @app.route('/grok')
