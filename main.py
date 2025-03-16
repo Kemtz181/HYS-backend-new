@@ -26,19 +26,17 @@ def get_news():
         if not news_api_key:
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
-        from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')  # Past 14 days
-        # Enhanced query for conflict and political tension
+        from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
         url = f"https://newsapi.org/v2/everything?q=(conflict+OR+war+OR+crisis+OR+tension+OR+protest)+AND+(Africa+OR+Middle+East+OR+Ukraine+OR+Europe)+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=10"
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
         if data.get('status') != 'ok':
             return jsonify({"error": "NewsAPI request failed", "details": data}), 500
-        # Prioritize content over description, handle truncation
         for article in data.get('articles', []):
             full_text = article.get('content', article.get('description', 'No full text available'))
-            if full_text and '...' in full_text[-10:]:
-                article['full_text'] = full_text + " [Full article unavailable due to source limitation]"
+            if full_text and '...' in full_text[-10:] or len(full_text) < 200:
+                article['full_text'] = f"{full_text} [Full article available at: {article.get('url', '#')}]"
             else:
                 article['full_text'] = full_text
             article['description'] = article.get('description', full_text[:150] + '...') if len(full_text) > 150 else full_text
