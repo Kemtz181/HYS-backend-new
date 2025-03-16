@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
@@ -24,7 +25,7 @@ def get_news():
         if not news_api_key:
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
-        from_date = datetime.utcnow().strftime('%Y-%m-%d')  # Today’s date
+        from_date = (datetime.utcnow() - timedelta(days=2)).strftime('%Y-%m-%d')  # Past 2 days
         url = f"https://newsapi.org/v2/everything?q=technology&from={from_date}&sortBy=publishedAt&apiKey={news_api_key}&pageSize=5"
         response = requests.get(url)
         response.raise_for_status()
