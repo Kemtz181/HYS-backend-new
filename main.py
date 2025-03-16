@@ -66,7 +66,7 @@ def get_news():
         print(f"NEWS_API_KEY found: {news_api_key[:5]}...")  # Debug: First 5 chars for security
 
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
-        # Simplified query to test NewsAPI response
+        # Simplified NewsAPI query
         newsapi_url = f"https://newsapi.org/v2/everything?q=(Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza+OR+Yemen+OR+Sudan)+-Ukraine+-Russia+-Zelensky&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
         print(f"NewsAPI URL: {newsapi_url}")  # Debug: Print the query
         try:
@@ -77,7 +77,6 @@ def get_news():
             print(f"NewsAPI total results: {newsapi_data.get('totalResults')}")  # Debug: Total results
             newsapi_articles = newsapi_data.get('articles', [])
             print(f"NewsAPI raw articles count: {len(newsapi_articles)}")  # Debug: Raw count
-            # Log first article for inspection
             if newsapi_articles:
                 print(f"First NewsAPI article: {newsapi_articles[0].get('title')}, {newsapi_articles[0].get('description')[:100]}...")
             # Filter NewsAPI articles
@@ -105,22 +104,29 @@ def get_news():
                 print(f"Parsing RSS feed: {feed_url}, Entries: {len(feed.entries)}, Status: {feed.status}")  # Debug: Feed status
                 if not feed.entries:
                     print(f"No entries in feed: {feed_url}")
+                    continue
                 for entry in feed.entries[:3]:
                     title = entry.get('title', '').lower()
                     summary = entry.get('summary', '').lower()
                     print(f"RSS entry - Title: {title[:50]}..., Summary: {summary[:50]}...")  # Debug: Entry details
+                    # Simplified relevance check: accept any article from these regional feeds
                     is_relevant = (
-                        ("africa" in title or "africa" in summary or
-                         "syria" in title or "syria" in summary or
-                         "palestine" in title or "palestine" in summary or
-                         "gaza" in title or "gaza" in summary or
-                         "yemen" in title or "yemen" in summary or
-                         "sudan" in title or "sudan" in summary or
-                         "violence" in title or "violence" in summary or
-                         "crisis" in title or "crisis" in summary or
-                         "protest" in title or "protest" in summary)
+                        "africa" in title or "africa" in summary or
+                        "syria" in title or "syria" in summary or
+                        "palestine" in title or "palestine" in summary or
+                        "gaza" in title or "gaza" in summary or
+                        "yemen" in title or "yemen" in summary or
+                        "sudan" in title or "sudan" in summary or
+                        feed_url in [
+                            "https://africa.cgtn.com/feed/",
+                            "http://feeds.bbci.co.uk/news/world/africa/rss.xml",
+                            "https://www.africanews.com/rss",
+                            "https://www.aljazeera.com/xml/rss/all.xml",
+                            "https://www.middleeasteye.net/rss",
+                            "http://feeds.bbci.co.uk/news/world/middle_east/rss.xml"
+                        ]
                     )
-                    # Relaxed exclusion: only reject if explicitly about Ukraine
+                    # Exclude Ukraine-related articles
                     if is_relevant and not any(term in (title + summary) for term in ['ukraine', 'russia', 'zelensky']):
                         rss_article = {
                             'title': entry.get('title', 'No title'),
@@ -132,6 +138,8 @@ def get_news():
                         }
                         rss_articles.append(rss_article)
                         print(f"Added RSS article: {entry.get('title', 'No title')}")
+                    else:
+                        print(f"Rejected RSS article: {entry.get('title', 'No title')} - Not relevant or contains excluded terms")
             except Exception as e:
                 print(f"RSS feed error for {feed_url}: {e}")
 
