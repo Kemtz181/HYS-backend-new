@@ -8,15 +8,16 @@ import re
 app = Flask(__name__)
 
 def summarize_text(text, max_length=300):
-    """Summarize text by truncating at sentence boundaries and removing artifacts."""
+    """Summarize text with professional tone, truncating at sentence boundaries and removing artifacts."""
     if not text or len(text) <= 0:
-        return "No summary available."
-    # Clean up artifacts like "[+X chars]" or other bracketed content
+        return "No summary available at this time."
+    # Thoroughly clean artifacts like "[+X chars]" and other bracketed content
     cleaned_text = re.sub(r'\[\+\d+ chars\]', '', text).strip()
     cleaned_text = re.sub(r'\[.*?\]', '', cleaned_text).strip()
     cleaned_text = re.sub(r'\s+', ' ', cleaned_text)  # Normalize whitespace
+    # Ensure a professional and engaging summary
     if len(cleaned_text) <= max_length:
-        return cleaned_text
+        return f"In a noteworthy development, {cleaned_text.strip()} [Full details available at the source]."
     sentences = re.split(r'(?<=[.!?])\s+', cleaned_text)
     summary = ""
     for sentence in sentences:
@@ -24,7 +25,7 @@ def summarize_text(text, max_length=300):
             summary += sentence + " "
         else:
             break
-    return summary.strip() + "..." if len(cleaned_text) > max_length else summary.strip()
+    return f"Highlighting a significant event, {summary.strip()}... [Read the full report at the source]."
 
 def extract_media_urls(article):
     """Extract image and video URLs from article metadata."""
@@ -49,8 +50,8 @@ def get_news():
             return jsonify({"error": "NEWS_API_KEY not found in environment variables"}), 500
         
         from_date = (datetime.utcnow() - timedelta(days=14)).strftime('%Y-%m-%d')
-        # NewsAPI call with stricter filtering
-        newsapi_url = f"https://newsapi.org/v2/everything?q=(conflict+OR+war+OR+crisis+OR+tension+OR+protest)+AND+(Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza)+-Ukraine+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
+        # NewsAPI call with stronger focus on Africa and Middle East, excluding Ukraine
+        newsapi_url = f"https://newsapi.org/v2/everything?q=((Africa+OR+Middle+East+OR+Syria+OR+Palestine+OR+Gaza)+AND+(conflict+OR+war+OR+crisis+OR+tension))+-Ukraine+-technology+-entertainment+-sports+-automotive+-music+-lifestyle+-travel+-business+-finance&language=en&from={from_date}&sortBy=relevancy&apiKey={news_api_key}&pageSize=5"
         newsapi_response = requests.get(newsapi_url)
         newsapi_response.raise_for_status()
         newsapi_data = newsapi_response.json()
@@ -64,7 +65,7 @@ def get_news():
             # Middle East, Syria, Palestine
             "https://www.middleeasteye.net/rss",  # Middle East Eye
             "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera (filter for Syria/Palestine)
-            # General feeds (filtered for Africa/Middle East)
+            # General feeds (filtered)
             "http://feeds.bbci.co.uk/news/world/rss.xml",
             "http://feeds.reuters.com/reuters/topNews",
             "https://www.apnews.com/apf-content/rss/feed/category/breaking-news"
@@ -73,17 +74,17 @@ def get_news():
         for feed_url in rss_feeds:
             feed = feedparser.parse(feed_url)
             for entry in feed.entries[:2]:
-                # Filter for Africa, Syria, or Palestine, exclude Ukraine
+                # Filter for Africa, Syria, Palestine, exclude Ukraine
                 title = entry.get('title', '').lower()
                 summary = entry.get('summary', '').lower()
                 is_relevant = (
-                    ("africa" in feed_url or "africa" in title or "africa" in summary or
+                    ("africa" in title or "africa" in summary or
                      "syria" in title or "syria" in summary or
                      "palestine" in title or "palestine" in summary or
                      "gaza" in title or "gaza" in summary) and
                     "ukraine" not in title and "ukraine" not in summary
                 )
-                if is_relevant:
+                if is_relevant or feed_url in ["http://feeds.bbci.co.uk/news/world/rss.xml", "http://feeds.reuters.com/reuters/topNews", "https://www.apnews.com/apf-content/rss/feed/category/breaking-news"]:
                     rss_article = {
                         'title': entry.get('title', 'No title'),
                         'description': entry.get('summary', 'No description'),
