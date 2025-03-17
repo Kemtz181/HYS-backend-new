@@ -30,8 +30,8 @@ def summarize_text(text, max_length=300):
         summary_text = cleaned_text[:max_length]  # Fallback to truncated cleaned text
     
     if len(summary_text) <= max_length:
-        return f"Unveiling a critical update, {summary_text.strip()}. Discover more at the source."
-    return f"Shedding light on a pressing issue, {summary_text[:max_length].strip()}... Explore the full narrative at the source."
+        return f"Unveiling a fresh perspective, {summary_text.strip()}. Discover more at the source."
+    return f"Shedding light on an untold story, {summary_text[:max_length].strip()}... Explore the full narrative at the source."
 
 def extract_media_urls(article):
     """Extract image and video URLs with debug."""
@@ -53,12 +53,14 @@ def extract_media_urls(article):
 def get_news():
     try:
         rss_feeds = [
-            "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera
-            "http://feeds.bbci.co.uk/news/world/rss.xml",  # BBC World
-            "http://feeds.reuters.com/reuters/topNews",  # Reuters
-            "https://www.lemonde.fr/rss/une.xml",  # Le Monde
-            "https://www.ndtv.com/rss/news/world-news",  # NDTV World
             "https://africa.cgtn.com/feed/",  # CGTN Africa
+            "https://www.africanews.com/rss",  # AfricaNews
+            "https://allafrica.com/tools/headlines/rss/world/africanews.xml",  # AllAfrica Africa News
+            "http://feeds.bbci.co.uk/news/world/africa/rss.xml",  # BBC Africa
+            "https://www.sudantribune.com/rssfeeds/latest-news.xml",  # Sudan Tribune
+            "https://www.ethiopianewsagency.com/feed/",  # Ethiopian News Agency
+            "https://www.voanews.com/feeds/africa-english.xml",  # VOA Africa
+            "https://www.france24.com/en/africa/rss",  # France24 Africa
         ]
         rss_articles = []
         for feed_url in rss_feeds:
@@ -72,8 +74,8 @@ def get_news():
                     title = entry.get('title', '').lower()
                     summary = entry.get('summary', '').lower()
                     print(f"RSS entry - Title: {title[:50]}..., Summary: {summary[:50]}...")
-                    # Exclude entertainment, tech, sports
-                    if any(term in (title + summary) for term in ['entertainment', 'tech', 'technology', 'sports', 'sport']):
+                    # Exclude Ukraine, entertainment, tech, sports
+                    if any(term in (title + summary) for term in ['ukraine', 'russia', 'zelensky', 'entertainment', 'tech', 'technology', 'sports', 'sport']):
                         print(f"Rejected RSS article: {entry.get('title', 'No title')} - Contains excluded term")
                         continue
                     # Check publication date (last 7 days)
