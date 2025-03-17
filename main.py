@@ -74,17 +74,27 @@ def get_news():
                     title = entry.get('title', '').lower()
                     summary = entry.get('summary', '').lower()
                     print(f"RSS entry - Title: {title[:50]}..., Summary: {summary[:50]}...")
-                    # Exclude Ukraine, entertainment, tech, sports
-                    if any(term in (title + summary) for term in ['ukraine', 'russia', 'zelensky', 'entertainment', 'tech', 'technology', 'sports', 'sport']):
-                        print(f"Rejected RSS article: {entry.get('title', 'No title')} - Contains excluded term")
-                        continue
-                    # Check publication date (last 7 days)
+                    # Log publication date
                     pub_date = entry.get('published_parsed')
                     if pub_date:
                         pub_datetime = datetime.fromtimestamp(sum(x * y for x, y in zip(pub_date[:6], [1, 60, 3600, 86400, 2629743, 31556926])))
+                        print(f"Publication date: {pub_datetime}")
                         if pub_datetime < (datetime.utcnow() - timedelta(days=7)):
                             print(f"Rejected RSS article: {entry.get('title', 'No title')} - Too old")
                             continue
+                    else:
+                        print(f"No publication date for article: {entry.get('title', 'No title')}")
+                    # Exclude Ukraine, entertainment, tech, sports
+                    excluded_terms = ['ukraine', 'russia', 'zelensky', 'entertainment', 'tech', 'technology', 'sports', 'sport']
+                    if any(term in (title + summary) for term in excluded_terms):
+                        print(f"Rejected RSS article: {entry.get('title', 'No title')} - Contains excluded term: {', '.join(term for term in excluded_terms if term in (title + summary))}")
+                        continue
+                    # Prioritize Africa-related content
+                    africa_keywords = ['africa', 'sudan', 'ethiopia', 'somalia', 'drc', 'congo', 'nigeria', 'kenya']
+                    is_africa_related = any(keyword in (title + summary) for keyword in africa_keywords)
+                    if not is_africa_related:
+                        print(f"Rejected RSS article: {entry.get('title', 'No title')} - Not Africa-related")
+                        continue
                     rss_article = {
                         'title': entry.get('title', 'No title'),
                         'description': entry.get('summary', 'No description'),
