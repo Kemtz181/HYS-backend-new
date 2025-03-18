@@ -22,7 +22,7 @@ def summarize_text(text, max_length=300):
     try:
         parser = PlaintextParser.from_string(cleaned_text, Tokenizer("english"))
         summarizer = LsaSummarizer()
-        summary_sentences = summarizer(parser.document, 2)  # Get 2 key sentences
+        summary_sentences = summarizer(parser.document, 3)  # Increase to 3 sentences for more context
         summary_text = " ".join(str(sentence) for sentence in summary_sentences)
         print(f"Sumy summary: {summary_text[:100]}...")  # Debug: First 100 chars of summary
     except Exception as e:
@@ -30,8 +30,8 @@ def summarize_text(text, max_length=300):
         summary_text = cleaned_text[:max_length]  # Fallback to truncated cleaned text
     
     if len(summary_text) <= max_length:
-        return f"Unveiling a fresh perspective, {summary_text.strip()}. Discover more at the source."
-    return f"Shedding light on an untold story, {summary_text[:max_length].strip()}... Explore the full narrative at the source."
+        return f"Unveiling a vital story from Africa, {summary_text.strip()}. Discover more at the source."
+    return f"Shedding light on an African narrative, {summary_text[:max_length].strip()}... Explore the full story at the source."
 
 def extract_media_urls(article):
     """Extract image and video URLs with debug."""
@@ -54,7 +54,7 @@ def get_news():
     try:
         rss_feeds = [
             "https://africa.cgtn.com/feed/",  # CGTN Africa
-            "https://www.africanews.com/rss",  # AfricaNews
+            "https://www.africanews.com/rss.xml",  # Corrected AfricaNews RSS (check if valid)
             "https://allafrica.com/tools/headlines/rss/world/africanews.xml",  # AllAfrica Africa News
             "http://feeds.bbci.co.uk/news/world/africa/rss.xml",  # BBC Africa
             "https://www.sudantribune.com/rssfeeds/latest-news.xml",  # Sudan Tribune
@@ -70,31 +70,29 @@ def get_news():
                 if not feed.entries:
                     print(f"No entries in feed: {feed_url}")
                     continue
-                for entry in feed.entries[:3]:
+                for entry in feed.entries[:5]:  # Increase to 5 entries per feed
                     title = entry.get('title', '').lower()
                     summary = entry.get('summary', '').lower()
                     print(f"RSS entry - Title: {title[:50]}..., Summary: {summary[:50]}...")
-                    # Log publication date
                     pub_date = entry.get('published_parsed')
                     if pub_date:
                         pub_datetime = datetime.fromtimestamp(sum(x * y for x, y in zip(pub_date[:6], [1, 60, 3600, 86400, 2629743, 31556926])))
                         print(f"Publication date: {pub_datetime}")
-                        if pub_datetime < (datetime.utcnow() - timedelta(days=7)):
-                            print(f"Rejected RSS article: {entry.get('title', 'No title')} - Too old")
-                            continue
+                        # Temporarily relax the 7-day filter to debug
+                        # if pub_datetime < (datetime.utcnow() - timedelta(days=7)):
+                        #     print(f"Rejected RSS article: {entry.get('title', 'No title')} - Too old")
+                        #     continue
                     else:
                         print(f"No publication date for article: {entry.get('title', 'No title')}")
-                    # Exclude Ukraine, entertainment, tech, sports
                     excluded_terms = ['ukraine', 'russia', 'zelensky', 'entertainment', 'tech', 'technology', 'sports', 'sport']
                     if any(term in (title + summary) for term in excluded_terms):
                         print(f"Rejected RSS article: {entry.get('title', 'No title')} - Contains excluded term: {', '.join(term for term in excluded_terms if term in (title + summary))}")
                         continue
-                    # Prioritize Africa-related content
-                    africa_keywords = ['africa', 'sudan', 'ethiopia', 'somalia', 'drc', 'congo', 'nigeria', 'kenya']
-                    is_africa_related = any(keyword in (title + summary) for keyword in africa_keywords)
-                    if not is_africa_related:
-                        print(f"Rejected RSS article: {entry.get('title', 'No title')} - Not Africa-related")
-                        continue
+                    # Relax Africa keyword check to accept any article from these feeds
+                    # africa_keywords = ['africa', 'sudan', 'ethiopia', 'somalia', 'drc', 'congo', 'nigeria', 'kenya']
+                    # if not any(keyword in (title + summary) for keyword in africa_keywords):
+                    #     print(f"Rejected RSS article: {entry.get('title', 'No title')} - Not Africa-related")
+                    #     continue
                     rss_article = {
                         'title': entry.get('title', 'No title'),
                         'description': entry.get('summary', 'No description'),
