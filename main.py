@@ -10,57 +10,58 @@ from sumy.summarizers.lsa import LsaSummarizer
 app = Flask(__name__)
 
 def summarize_text(text, max_length=300):
-    """Rewrite text with a professional and engaging tone using Sumy (LSA), with debug."""
     if not text or len(text) <= 0:
         print("No text to summarize")
         return "No summary available at this time."
     cleaned_text = re.sub(r'\[\+\d+ chars\]', '', text).strip()
     cleaned_text = re.sub(r'\[.*?\]', '', cleaned_text).strip()
     cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
-    print(f"Cleaned text: {cleaned_text[:100]}...")  # Debug: First 100 chars
-    
+    print(f"Cleaned text: {cleaned_text[:100]}...")
+
     try:
         parser = PlaintextParser.from_string(cleaned_text, Tokenizer("english"))
         summarizer = LsaSummarizer()
-        summary_sentences = summarizer(parser.document, 3)  # Increase to 3 sentences for more context
+        summary_sentences = summarizer(parser.document, 3)
         summary_text = " ".join(str(sentence) for sentence in summary_sentences)
-        print(f"Sumy summary: {summary_text[:100]}...")  # Debug: First 100 chars of summary
+        print(f"Sumy summary: {summary_text[:100]}...")
     except Exception as e:
         print(f"Sumy error: {e}")
-        summary_text = cleaned_text[:max_length]  # Fallback to truncated cleaned text
-    
+        summary_text = cleaned_text[:max_length]
+
     if len(summary_text) <= max_length:
         return f"Unveiling a vital story from Africa, {summary_text.strip()}. Discover more at the source."
     return f"Shedding light on an African narrative, {summary_text[:max_length].strip()}... Explore the full story at the source."
 
 def extract_media_urls(article):
-    """Extract image and video URLs with debug."""
     media = {}
-    if 'media_content' in article:
-        for content in article.get('media_content', []):
-            if content.get('type', '').startswith('image/'):
-                media['image'] = content.get('url')
-                print(f"Found media image: {content.get('url')}")
-            elif content.get('type', '').startswith('video/'):
-                media['video'] = content.get('url')
-                print(f"Found media video: {content.get('url')}")
-    if 'media_thumbnail' in article:
-        media['image'] = article['media_thumbnail'][0].get('url')
-        print(f"Found thumbnail: {article['media_thumbnail'][0].get('url')}")
+    try:
+        if 'media_content' in article and article['media_content']:
+            for content in article['media_content']:
+                if content.get('type', '').startswith('image/'):
+                    media['image'] = content.get('url')
+                    print(f"Found media image: {content.get('url')}")
+                elif content.get('type', '').startswith('video/'):
+                    media['video'] = content.get('url')
+                    print(f"Found media video: {content.get('url')}")
+        if 'media_thumbnail' in article and article['media_thumbnail']:
+            media['image'] = article['media_thumbnail'][0].get('url')
+            print(f"Found thumbnail: {article['media_thumbnail'][0].get('url')}")
+    except Exception as e:
+        print(f"Error extracting media: {e}")
     return media
 
 @app.route('/news')
 def get_news():
     try:
         rss_feeds = [
-            "https://africa.cgtn.com/feed/",  # CGTN Africa
-            "https://www.africanews.com/rss.xml",  # Corrected AfricaNews RSS (check if valid)
-            "https://allafrica.com/tools/headlines/rss/world/africanews.xml",  # AllAfrica Africa News
-            "http://feeds.bbci.co.uk/news/world/africa/rss.xml",  # BBC Africa
-            "https://www.sudantribune.com/rssfeeds/latest-news.xml",  # Sudan Tribune
-            "https://www.ethiopianewsagency.com/feed/",  # Ethiopian News Agency
-            "https://www.voanews.com/feeds/africa-english.xml",  # VOA Africa
-            "https://www.france24.com/en/africa/rss",  # France24 Africa
+            "https://africa.cgtn.com/feed/",
+            "https://www.africanews.com/rss.xml",
+            "https://allafrica.com/tools/headlines/rss/world/africanews.xml",
+            "http://feeds.bbci.co.uk/news/world/africa/rss.xml",
+            "https://www.sudantribune.com/rssfeeds/latest-news.xml",
+            "https://www.ethiopianewsagency.com/feed/",
+            "https://www.voanews.com/feeds/africa-english.xml",
+            "https://www.france24.com/en/africa/rss",
         ]
         rss_articles = []
         for feed_url in rss_feeds:
@@ -70,7 +71,7 @@ def get_news():
                 if not feed.entries:
                     print(f"No entries in feed: {feed_url}")
                     continue
-                for entry in feed.entries[:5]:  # Increase to 5 entries per feed
+                for entry in feed.entries[:5]:
                     title = entry.get('title', '').lower()
                     summary = entry.get('summary', '').lower()
                     print(f"RSS entry - Title: {title[:50]}..., Summary: {summary[:50]}...")
@@ -78,21 +79,12 @@ def get_news():
                     if pub_date:
                         pub_datetime = datetime.fromtimestamp(sum(x * y for x, y in zip(pub_date[:6], [1, 60, 3600, 86400, 2629743, 31556926])))
                         print(f"Publication date: {pub_datetime}")
-                        # Temporarily relax the 7-day filter to debug
-                        # if pub_datetime < (datetime.utcnow() - timedelta(days=7)):
-                        #     print(f"Rejected RSS article: {entry.get('title', 'No title')} - Too old")
-                        #     continue
                     else:
                         print(f"No publication date for article: {entry.get('title', 'No title')}")
                     excluded_terms = ['ukraine', 'russia', 'zelensky', 'entertainment', 'tech', 'technology', 'sports', 'sport']
                     if any(term in (title + summary) for term in excluded_terms):
-                        print(f"Rejected RSS article: {entry.get('title', 'No title')} - Contains excluded term: {', '.join(term for term in excluded_terms if term in (title + summary))}")
+                        print(f"Rejected RSS article: {entry.get('title', 'No title')} - Contains excluded term")
                         continue
-                    # Relax Africa keyword check to accept any article from these feeds
-                    # africa_keywords = ['africa', 'sudan', 'ethiopia', 'somalia', 'drc', 'congo', 'nigeria', 'kenya']
-                    # if not any(keyword in (title + summary) for keyword in africa_keywords):
-                    #     print(f"Rejected RSS article: {entry.get('title', 'No title')} - Not Africa-related")
-                    #     continue
                     rss_article = {
                         'title': entry.get('title', 'No title'),
                         'description': entry.get('summary', 'No description'),
@@ -142,4 +134,6 @@ def get_grok():
         return jsonify({"error": f"Failed to fetch Grok insights: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    import sys
+    port = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == '--port' else 5000
+    app.run(host='0.0.0.0', port=port)
